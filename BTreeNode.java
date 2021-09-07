@@ -1,121 +1,153 @@
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedList;
 
 /**
- * Author:  bielu
- * Date:    2018/3/13 23:12
- * Desc:    M阶B-Tree的节点
+ * Author: Zixiao Guo
+ * RedId: 822029189
+ * CS635 Assignment 1
+ * Section 2
+ * 9/7/2021
  */
 public class BTreeNode {
-    /**
-     * B树的阶
-     */
-    int M;
 
     /**
-     * 关键字列表
+     * The order of b-tree is 3
      */
-    LinkedList<Student> students;
+    private static final int M = 3;
+    LinkedList<Student> students;       // entry of students in one node
+    BTreeNode parentNode;
+    LinkedList<BTreeNode> childrenNode;
 
     /**
-     * 父节点
+     * Creates new node of b-tree and instantiate its student entries and child nodes
      */
-    BTreeNode parent;
-
-    /**
-     * 孩子列表
-     */
-    LinkedList<BTreeNode> children;
-
-    /**
-     * 构造一棵空的B-树
-     */
-    private BTreeNode() {
+    public BTreeNode() {
         this.students = new LinkedList<Student>();
-        this.children = new LinkedList<BTreeNode>();
+        this.childrenNode = new LinkedList<BTreeNode>();
     }
 
     /**
-     * 构造一棵空的m阶B-树
-     *
-     * @param m B-树的阶
-     */
-    public BTreeNode(int m) {
-        this();
-        if(m < 3) {
-            throw new RuntimeException("The order of B-Tree should be greater than 2.");
-        }
-        this.M = m;
-    }
-
-    /**
-     * 根据父节点构造一个空的孩子节点
-     *
-     * @param parent 父节点
+     * Constructs a new node and assign the parent pointer to the node passed in
+     * @param parent pointer of parent node
      */
     public BTreeNode(BTreeNode parent) {
-        this(parent.M);
-        this.parent = parent;
+        this();
+        this.parentNode = parent;
     }
 
-
+    /**
+     * Insert student object to the b-tree, if node is empty, instantiate the children nodes
+     * search from the root to determine which node to insert, then insert the node
+     * if new node is generated during the insertion, we need to find the new root to return
+     * @param student student object to insert into
+     * @return returns the root node of the b-tree
+     */
     public BTreeNode insert(Student student) {
         if(isEmpty()) {
             students.add(student);
-            children.add(new BTreeNode(this));
-            children.add(new BTreeNode(this));
+            childrenNode.add(new BTreeNode(this));
+            childrenNode.add(new BTreeNode(this));
             return this;
         }
         BTreeNode p = getRoot().search(student);
-        if(!p.isEmpty()) {
-            throw new RuntimeException("cannot insert duplicate key to B-Tree, key: " + student);
-        }
-        insertNode(p.parent, student, new BTreeNode(p.M));
+        insertNode(p.parentNode, student, new BTreeNode());
         return getRoot();
     }
 
-    private void insertNode(BTreeNode node, Student student, BTreeNode eNode) {
+    /**
+     * Insert student object into the student entries of the target node
+     * we also need to add the additional child node to fit the increase of the node
+     * @param node target node to insert student object
+     * @param student student to insert into the target node
+     * @param extraChildNode extra child node comes with the new student entry
+     */
+    private void insertNode(BTreeNode node, Student student, BTreeNode extraChildNode) {
         int valueIndex = 0;
-        while(valueIndex < node.students.size() && node.students.get(valueIndex).getName().compareTo(student.getName()) < 0) {
+        while(valueIndex < node.students.size() && node.students.get(valueIndex)
+                .getName().compareTo(student.getName()) < 0) {
             valueIndex++;
         }
+        //TODO: make a function to compare student name for code abstraction
         node.students.add(valueIndex, student);
-        eNode.parent = node;
-        node.children.add(valueIndex+1, eNode);
+
+        //insert additional child node to fit the increase
+        extraChildNode.parentNode = node;
+        node.childrenNode.add(valueIndex+1, extraChildNode);
+
+        // if size is greater or equal to order, need to generate new nodes
         if(node.students.size() > M-1) {
-            // 获取上升关键字
-            int upIndex = M/2;
-            Student up = node.students.get(upIndex);
-            // 当前节点分为左右两部分，左部的parent不变，右部的parent放在上升关键字右侧
-            BTreeNode rNode = new BTreeNode(M);
-            rNode.students = new LinkedList(node.students.subList(upIndex+1, M));
-            rNode.children = new LinkedList(node.children.subList(upIndex+1, M+1));
-            /*  由于rNode.children是从node.children分离出来的,其parent仍指向node，
-                所以需要将rNode.children的parent改为指向rNode
+            //TODO: make a seperate function to make it more OOP
+            /*
+             since this is an order 3 b-tree, when the new node need to be generated,
+             the middle student entry get promoted, which index equals to M/2 = 1
              */
-            for(BTreeNode rChild : rNode.children) {
-                rChild.parent = rNode;
+            int upIndex = 1;
+            Student studentPromoted = node.students.get(upIndex);
+
+            // instantiate a new node and moves the entries and child nodes into it
+            BTreeNode rightNode = new BTreeNode();
+            rightNode.students = new LinkedList(node.students.subList(upIndex+1, M));
+            rightNode.childrenNode = new LinkedList(node.childrenNode.subList(upIndex+1, M+1));
+            for(BTreeNode rChild : rightNode.childrenNode) {
+                rChild.parentNode = rightNode;
             }
+
+            // remove previously assigned node, if the node is root node, generate new node as root
             node.students = new LinkedList(node.students.subList(0, upIndex));
-            node.children = new LinkedList(node.children.subList(0, upIndex+1));
-            // 从根节点中上升，选取上升关键字作为新的根节点
-            if(node.parent == null) {
-                node.parent = new BTreeNode(M);
-                node.parent.students.add(up);
-                node.parent.children.add(node);
-                node.parent.children.add(rNode);
-                rNode.parent = node.parent;
+            node.childrenNode = new LinkedList(node.childrenNode.subList(0, upIndex+1));
+            if(node.parentNode == null) {
+                node.parentNode = new BTreeNode();
+                node.parentNode.students.add(studentPromoted);
+                node.parentNode.childrenNode.add(node);
+                node.parentNode.childrenNode.add(rightNode);
+                rightNode.parentNode = node.parentNode;
                 return;
             }
-            // 父节点增加关键字，递归调用
-            insertNode(node.parent, up, rNode);
+            insertNode(node.parentNode, studentPromoted, rightNode);
+        }
+    }
+
+    private BTreeNode spilitNode (BTreeNode node) {
+        if(node.students.size() > M-1) {
+            //TODO: make a seperate function to make it more OOP
+            /*
+             since this is an order 3 b-tree, when the new node need to be generated,
+             the middle student entry get promoted, which index equals to M/2 = 1
+             */
+            int upIndex = 1;
+            Student studentPromoted = node.students.get(upIndex);
+
+            // instantiate a new node and moves the entries and child nodes into it
+            BTreeNode rightNode = new BTreeNode();
+            rightNode.students = new LinkedList(node.students.subList(upIndex+1, M));
+            rightNode.childrenNode = new LinkedList(node.childrenNode.subList(upIndex+1, M+1));
+            for(BTreeNode rChild : rightNode.childrenNode) {
+                rChild.parentNode = rightNode;
+            }
+
+            // remove previously assigned node, if the node is root node, generate new node as root
+            node.students = new LinkedList(node.students.subList(0, upIndex));
+            node.childrenNode = new LinkedList(node.childrenNode.subList(0, upIndex+1));
+            if(node.parentNode == null) {
+                node.parentNode = new BTreeNode();
+                node.parentNode.students.add(studentPromoted);
+                node.parentNode.childrenNode.add(node);
+                node.parentNode.childrenNode.add(rightNode);
+                rightNode.parentNode = node.parentNode;
+                return;
+            }
+            insertNode(node.parentNode, studentPromoted, rightNode);
         }
     }
 
     /**
-     * 从当前节点往下查找目标值target
-     *
-     * @param target
-     * @return 找到则返回找到的节点，不存在则返回叶子节点
+     * Recursively search the target entry inside the b-tree
+     * if found the target, return the current node, otherwise call the method on the children
+     * if the result is empty node, return the empty node
+     * @param target the target student object
+     * @return returns the search result
      */
     public BTreeNode search(Student target) {
         if(isEmpty()) {
@@ -128,26 +160,24 @@ public class BTreeNode {
             }
             valueIndex++;
         }
-        return children.get(valueIndex).search(target);
+        return childrenNode.get(valueIndex).search(target);
     }
 
     /**
-     * 获取根节点
-     *
-     * @return 根节点
+     * Finds the root node
+     * @return the root node
      */
     public BTreeNode getRoot() {
         BTreeNode p = this;
         while(!p.isRoot()) {
-            p = p.parent;
+            p = p.parentNode;
         }
         return p;
     }
 
     /**
-     * 判断当前节点是否是空节点
-     *
-     * @return 空节点返回true, 非空节点返回false
+     * Checks if a node is empty
+     * @return returns true if node is empty, false otherwise
      */
     public boolean isEmpty() {
         if(students == null || students.size() == 0) {
@@ -157,35 +187,20 @@ public class BTreeNode {
     }
 
     /**
-     * 判断当前节点是否是根节点
-     *
-     * @return 是根节点返回true, 不是返回false
+     * Check if current node is root
+     * @return
      */
     public boolean isRoot() {
-        return parent == null;
-    }
-
-    /*
-     * 清空当前节点, 保留父关系
-     */
-    public void clear() {
-        students.clear();
-        children.clear();
+        return parentNode == null;
     }
 
     /**
-     * 以当前节点为根，在控制台打印B-树
+     * Print the tree structure
      */
     public void print() {
         printNode(this, 0);
     }
 
-    /**
-     * 控制台打印节点的递归调用
-     *
-     * @param node 要打印节点
-     * @param depth 递归深度
-     */
     private void printNode(BTreeNode node, int depth) {
         StringBuilder sb = new StringBuilder();
         for(int i = 1; i < depth; i++) {
@@ -196,8 +211,81 @@ public class BTreeNode {
         }
         sb.append(node.students);
         System.out.println(sb.toString());
-        for(BTreeNode child : node.children) {
+        for(BTreeNode child : node.childrenNode) {
             printNode(child, depth+1);
         }
     }
+
+    public Student search (int index) {
+        ArrayList<Student> students = new ArrayList<Student>();
+        students = search(index, students);
+        if (index > students.size()) {
+            throw new IndexOutOfBoundsException();
+        }
+        else {
+            Collections.sort(students, Comparator.comparing(Student::getName));
+            return students.get(index -1);
+        }
+    }
+
+    private ArrayList<Student> search(int index, ArrayList<Student> students) {
+
+        if (!this.isEmpty()) {
+            for (BTreeNode childNode : this.childrenNode) {
+                childNode.search(index, students);
+            }
+            for (Student student : this.students) {
+                students.add(student);
+            }
+
+        }
+
+        return students;
+    }
+
+    public ArrayList<Student> searchForProbationStudents (BTreeNode node, ArrayList<Student> studentsOnProbation) {
+        if (!node.isEmpty()) {
+            for (BTreeNode childNode : node.childrenNode) {
+                childNode.searchForProbationStudents(childNode, studentsOnProbation);
+            }
+            for (Student student : this.students) {
+                if (student.getGpa() < 2.85f) {
+                    studentsOnProbation.add(student);
+                }
+            }
+
+        }
+        Collections.sort(studentsOnProbation, Comparator.comparing(Student::getName));
+        return studentsOnProbation;
+    }
+
+    public ArrayList<Student> searchForStudentWithGoodGPA (BTreeNode node, ArrayList<Student> goodGPAStudents) {
+        if (!node.isEmpty()) {
+            for (BTreeNode childNode : node.childrenNode) {
+                childNode.searchForStudentWithGoodGPA(childNode, goodGPAStudents);
+            }
+            for (Student student : this.students) {
+                if (student.getGpa() == 4.0f) {
+                    goodGPAStudents.add(student);
+                }
+            }
+
+        }
+        Collections.sort(goodGPAStudents, Comparator.comparing(Student::getName));
+        return goodGPAStudents;
+    }
+
+
+
+
+    /*
+    public void searchForProbationStudents () {
+        if (!this.isEmpty()) {
+            for (BTreeNode childNode : this.childrenNode) {
+                childNode.searchForProbationStudents();
+            }
+        }
+    }
+
+     */
 }
